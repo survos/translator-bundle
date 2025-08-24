@@ -34,6 +34,7 @@ final class TranslatorTestCommand
         );
 
         $res = $eng->translate($req);
+        dd($req, $res);
 
         $io->writeln(sprintf('<info>[%s]</info> %s', $eng->getName(), $res->translatedText));
         if ($res->detectedSource !== '' && $from === 'auto') {
