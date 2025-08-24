@@ -4,7 +4,10 @@ declare(strict_types=1);
 namespace Survos\TranslatorBundle;
 
 use Survos\TranslatorBundle\Command\TranslatorTestCommand;
+use Psr\Cache\CacheItemPoolInterface;
 use Survos\TranslatorBundle\Engine\LibreTranslateEngine;
+use Survos\TranslatorBundle\Engine\DeepLEngine;
+use Survos\TranslatorBundle\Engine\GoogleTranslateEngine;
 use Survos\TranslatorBundle\Service\{TranslatorRegistry, TranslatorManager};
 use Symfony\Component\Config\Definition\Configurator\DefinitionConfigurator;
 use Symfony\Component\DependencyInjection\Argument\ServiceLocatorArgument;
@@ -12,12 +15,12 @@ use Symfony\Component\DependencyInjection\Compiler\CompilerPassInterface;
 use Symfony\Component\DependencyInjection\ContainerBuilder;
 use Symfony\Component\DependencyInjection\Loader\Configurator\ContainerConfigurator;
 use Symfony\Component\DependencyInjection\Reference;
-use Symfony\Contracts\HttpClient\HttpClientInterface;
 use Symfony\Component\HttpKernel\Bundle\AbstractBundle;
+use Symfony\Contracts\HttpClient\HttpClientInterface;
 
 final class SurvosTranslatorBundle extends AbstractBundle implements CompilerPassInterface
 {
-   public function configure(DefinitionConfigurator $definition): void
+    public function configure(DefinitionConfigurator $definition): void
     {
         $definition->rootNode()
             ->children()
@@ -37,7 +40,7 @@ final class SurvosTranslatorBundle extends AbstractBundle implements CompilerPas
                             ->scalarNode('base_uri')->defaultNull()->end()
                             ->scalarNode('api_key')->defaultNull()->end()
                             ->scalarNode('region')->defaultNull()->end()
-                            ->scalarNode('plan')->defaultNull()->end()
+                            ->scalarNode('plan')->defaultNull()->end()   // for deepl: 'free' | 'pro'
                         ->end()
                     ->end()
                 ->end()
@@ -52,7 +55,6 @@ final class SurvosTranslatorBundle extends AbstractBundle implements CompilerPas
         // Core services
         $builder->register(TranslatorRegistry::class)->setPublic(true);
         $builder->register(TranslatorManager::class)->setPublic(true)->setAutowired(true);
-
         foreach ([TranslatorTestCommand::class] as $class) {
             $builder->autowire($class)
                 ->setAutoconfigured(true)
@@ -73,12 +75,26 @@ final class SurvosTranslatorBundle extends AbstractBundle implements CompilerPas
         foreach ($config['engines'] ?? [] as $name => $cfg) {
             $type = (string)$cfg['type'];
 
+            // Compute default base URIs if not provided
+            $baseUri = (string)($cfg['base_uri'] ?? '');
+            if ($baseUri === '') {
+                if ($type === 'deepl') {
+                    $plan = strtolower((string)($cfg['plan'] ?? 'free'));
+                    $baseUri = $plan === 'pro' ? 'https://api.deepl.com' : 'https://api-free.deepl.com';
+                } elseif ($type === 'google') {
+                    $baseUri = 'https://translation.googleapis.com';
+                }
+                // libre/google with custom hosts are still supported via base_uri in config
+            }
+
             // Scoped HttpClient for this engine
             $clientId = sprintf('survos.translator.http_client.%s', $name);
             $builder->register($clientId, HttpClientInterface::class)
                 ->setFactory([new Reference('http_client'), 'withOptions'])
-                ->setArguments([[ 'base_uri' => $cfg['base_uri'] ?? null ]])
+                ->setArguments([[ 'base_uri' => $baseUri ?: ($cfg['base_uri'] ?? null) ]])
                 ->setPublic(false);
+
+            $engineId = null;
 
             if ($type === 'libre') {
                 $engineId = sprintf('survos.translator.engine.%s', $name);
@@ -89,15 +105,39 @@ final class SurvosTranslatorBundle extends AbstractBundle implements CompilerPas
                         $cfg['api_key'] ?? null,
                         $cacheRef,              // ?CacheItemPoolInterface
                         $defaultTtl,            // int
-                        (string)($cfg['base_uri'] ?? ''),
+                        (string)$baseUri,
                     ])
-                    ->setAutowired(false)
-                    ->setAutoconfigured(false)
                     ->setPublic(false);
-
-                $engineServiceIds[$name] = $engineId;
+            } elseif ($type === 'deepl') {
+                $engineId = sprintf('survos.translator.engine.%s', $name);
+                $builder->register($engineId, DeepLEngine::class)
+                    ->setArguments([
+                        new Reference($clientId),
+                        $name,
+                        $cfg['api_key'] ?? null,
+                        $cacheRef,
+                        $defaultTtl,
+                        (string)$baseUri,
+                    ])
+                    ->setPublic(false);
+            } elseif ($type === 'google') {
+                $engineId = sprintf('survos.translator.engine.%s', $name);
+                $builder->register($engineId, GoogleTranslateEngine::class)
+                    ->setArguments([
+                        new Reference($clientId),
+                        $name,
+                        $cfg['api_key'] ?? null,
+                        $cacheRef,
+                        $defaultTtl,
+                        (string)$baseUri,
+                    ])
+                    ->setPublic(false);
+            } else {
+                // 'bing' or unknown placeholder for future engines
+                continue;
             }
-            // TODO: add bing/deepl/google engines following the same pattern
+
+            $engineServiceIds[$name] = $engineId;
         }
 
         // ServiceLocator for registry

@@ -16,7 +16,10 @@ final class TranslatorRegistry
         private readonly string $defaultEngine,
     ) {}
 
-    public function names(): array { return array_keys($this->engineServiceIds); }
+    /** @return list<string> */
+    public function names(): array { return array_values(array_keys($this->engineServiceIds)); }
+
+    public function defaultName(): string { return $this->defaultEngine; }
 
     public function get(string $name): TranslatorEngineInterface
     {

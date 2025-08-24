@@ -11,7 +11,7 @@ use Symfony\Component\Console\Attribute\Option;
 use Symfony\Component\Console\Style\SymfonyStyle;
 use Symfony\Component\Console\Command\Command;
 
-#[AsCommand('survos:translator:test', 'Quick smoke test for an engine')]
+#[AsCommand('survos:translator:test', 'Quick smoke test for one or more engines')]
 final class TranslatorTestCommand
 {
     public function __construct(private readonly TranslatorManager $manager) {}
@@ -19,22 +19,44 @@ final class TranslatorTestCommand
     public function __invoke(
         SymfonyStyle $io,
         #[Argument('Text to translate')] string $text,
-        #[Option('Engine name (defaults to config default)')] ?string $engine = null,
+        #[Option('Engine name (defaults to config default; choose interactively if multiple)')] ?string $engine = null,
         #[Option('Source language, e.g. en or auto')] string $from = 'auto',
         #[Option('Target language, e.g. es')] string $to = 'es',
         #[Option('Treat input as HTML')] bool $html = false,
+        #[Option('Translate with all configured engines and compare results')] bool $all = false,
     ): int {
-        $eng = $engine ? $this->manager->by($engine) : $this->manager->default();
+        $names = $this->manager->names();
 
-        $req = new TranslationRequest(
-            text: $text,
-            source: $from,
-            target: $to,
-            html: $html,
-        );
+        if ($all) {
+            if (\count($names) === 0) {
+                $io->error('No translator engines are configured.');
+                return Command::FAILURE;
+            }
+            $rows = [];
+            foreach ($names as $name) {
+                $eng = $this->manager->by($name);
+                $res = $eng->translate(new TranslationRequest($text, $from, $to, $html));
+                $rows[] = [$eng->getName(), $res->detectedSource, $res->translatedText];
+            }
+            $io->table(['Engine', 'Detected', 'Translation'], $rows);
+            return Command::SUCCESS;
+        }
 
-        $res = $eng->translate($req);
-        dd($req, $res);
+        // Single engine path
+        if ($engine === null) {
+            if (\count($names) === 0) {
+                $io->error('No translator engines are configured.');
+                return Command::FAILURE;
+            } elseif (\count($names) === 1) {
+                $engine = $names[0];
+            } else {
+                $default = $this->manager->defaultName();
+                $engine = $io->choice('Select a translator engine', $names, $default);
+            }
+        }
+
+        $eng = $this->manager->by($engine);
+        $res = $eng->translate(new TranslationRequest($text, $from, $to, $html));
 
         $io->writeln(sprintf('<info>[%s]</info> %s', $eng->getName(), $res->translatedText));
         if ($res->detectedSource !== '' && $from === 'auto') {
