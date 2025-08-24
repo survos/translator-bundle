@@ -20,33 +20,87 @@ use Symfony\Contracts\HttpClient\HttpClientInterface;
 
 final class SurvosTranslatorBundle extends AbstractBundle implements CompilerPassInterface
 {
-    public function configure(DefinitionConfigurator $definition): void
+public function configure(DefinitionConfigurator $definition): void
     {
         $definition->rootNode()
             ->children()
-                ->scalarNode('default_engine')->defaultValue('default')->end()
+                ->scalarNode('default_engine')
+                    ->defaultValue('libre_local')
+                    ->info('Name of the engine to use by default (e.g. "libre_local").')
+                ->end()
                 ->arrayNode('cache')
                     ->addDefaultsIfNotSet()
                     ->children()
-                        ->scalarNode('pool')->defaultNull()->end() // CacheItemPoolInterface service id or null
-                        ->integerNode('ttl')->defaultValue(0)->min(0)->end() // seconds; 0 = no expiration
+                        ->scalarNode('pool')
+                            ->defaultNull()
+                            ->info('CacheItemPoolInterface service id (e.g. "cache.translator"). Leave null to disable caching.')
+                        ->end()
+                        ->integerNode('ttl')
+                            ->defaultValue(0)
+                            ->min(0)
+                            ->info('Default TTL (seconds) for cached translations. 0 = no expiration.')
+                        ->end()
                     ->end()
                 ->end()
                 ->arrayNode('engines')
+                    ->info(<<<'INFO'
+Configure one or more named engines. Examples (commented-out):
+
+  survos_translator:
+    default_engine: libre_local
+    engines:
+      # LibreTranslate (no API key required by default)
+      # libre_local:
+      #   type: libre
+      #   base_uri: 'http://localhost:5000'
+      #   api_key: null
+
+      # DeepL (API key REQUIRED; host inferred from plan when base_uri is omitted)
+      # deepl_free:
+      #   type: deepl
+      #   plan: free            # or "pro"
+      #   api_key: '%env(DEEPL_API_KEY)%'
+
+      # Google Cloud Translate (API key REQUIRED; host inferred when base_uri is omitted)
+      # google:
+      #   type: google
+      #   api_key: '%env(GOOGLE_TRANSLATE_KEY)%'
+
+      # Bing (API key REQUIRED; region often required; host can be inferred in the engine)
+      # bing_global:
+      #   type: bing
+      #   region: 'global'
+      #   api_key: '%env(BING_TRANSLATOR_KEY)%'
+INFO)
                     ->useAttributeAsKey('name')
                     ->arrayPrototype()
                         ->children()
-                            ->enumNode('type')->values(['libre','bing','deepl','google'])->isRequired()->end()
-                            ->scalarNode('base_uri')->defaultNull()->end()
-                            ->scalarNode('api_key')->defaultNull()->end()
-                            ->scalarNode('region')->defaultNull()->end()
-                            ->scalarNode('plan')->defaultNull()->end()   // for deepl: 'free' | 'pro'
+                            ->enumNode('type')
+                                ->values(['libre','bing','deepl','google'])
+                                ->isRequired()
+                                ->info('Provider. API key is REQUIRED for deepl/google/bing; optional for libre.')
+                            ->end()
+                            ->scalarNode('base_uri')
+                                ->defaultNull()
+                                ->info('Optional. If null, sensible defaults are used for deepl/google/bing; for self-hosted LibreTranslate, set your host.')
+                            ->end()
+                            ->scalarNode('api_key')
+                                ->defaultNull()
+                                ->info('Provider API key (use env vars like %env(DEEPL_API_KEY)%). Required for deepl/google/bing; optional for libre.')
+                            ->end()
+                            ->scalarNode('region')
+                                ->defaultNull()
+                                ->info('Some providers (e.g. Bing) require a region (e.g. "global").')
+                            ->end()
+                            ->scalarNode('plan')
+                                ->defaultNull()
+                                ->info('For DeepL: "free" or "pro". Determines default host if base_uri is not set.')
+                            ->end()
                         ->end()
                     ->end()
                 ->end()
             ->end();
     }
-
     /**
      * @param array<string,mixed> $config
      */

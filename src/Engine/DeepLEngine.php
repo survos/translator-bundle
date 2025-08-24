@@ -38,8 +38,8 @@ final class DeepLEngine implements TranslatorEngineInterface
     public function translate(TranslationRequest $req): TranslationResult
     {
         $body = [
-            // DeepL expects uppercase language codes like EN, ES, PT-BR
             'target_lang' => strtoupper($req->target),
+            'text'        => $req->text, // FIX: send a single 'text' field (not an array)
         ];
         if ($req->source !== '' && strtolower($req->source) !== 'auto') {
             $body['source_lang'] = strtoupper($req->source);
@@ -50,11 +50,9 @@ final class DeepLEngine implements TranslatorEngineInterface
         if ($req->glossaryId) {
             $body['glossary_id'] = $req->glossaryId;
         }
-        // Allow additional DeepL params via extra (e.g., formality)
         foreach ($req->extra as $k => $v) {
             $body[(string)$k] = $v;
         }
-        $body['text'] = [$req->text];
 
         $key = $this->cacheKey('translate', $body);
 
@@ -63,17 +61,16 @@ final class DeepLEngine implements TranslatorEngineInterface
                 'headers' => $this->authHeaders(),
                 'body'    => $body, // x-www-form-urlencoded
             ]);
-            dd($this->apiKey, $this->authHeaders());
             $status = $resp->getStatusCode();
             if ($status >= 400) {
-                throw new EngineHttpException($status, $resp->getContent(false));
+                throw new \Survos\TranslatorBundle\Exception\EngineHttpException($status, $resp->getContent(false));
             }
             /** @var array{translations?: array<int, array{text:string, detected_source_language?:string}>} $arr */
-            $arr = $resp->toArray();
-            return $arr;
+            return $resp->toArray();
         });
 
         $first = $data['translations'][0] ?? ['text' => '', 'detected_source_language' => $req->source];
+
         return new TranslationResult(
             translatedText: (string)($first['text'] ?? ''),
             detectedSource: (string)($first['detected_source_language'] ?? ($req->source === 'auto' ? 'auto' : $req->source)),
@@ -104,7 +101,6 @@ final class DeepLEngine implements TranslatorEngineInterface
                 'headers' => $this->authHeaders(),
                 'body'    => $body,
             ]);
-            dd($body, $this->authHeaders());
             $status = $resp->getStatusCode();
             if ($status >= 400) {
                 throw new EngineHttpException($status, $resp->getContent(false));
