@@ -16,15 +16,15 @@ use Survos\TranslatorBundle\Model\{
 };
 use Symfony\Contracts\HttpClient\HttpClientInterface;
 
-final class LibreTranslateEngine implements TranslatorEngineInterface
+final readonly class LibreTranslateEngine implements TranslatorEngineInterface
 {
     public function __construct(
-        private readonly HttpClientInterface $client, // scoped client
-        private readonly string $name,                // engine config key
-        private readonly ?string $apiKey = null,
-        private readonly ?CacheItemPoolInterface $cache = null,
-        private readonly int $defaultTtl = 0,         // seconds; 0 => no expiration
-        private readonly string $baseUriForKey = '',  // avoid key collisions across hosts
+        private HttpClientInterface     $client, // scoped client
+        private string                  $name,                // engine config key
+        private ?string                 $apiKey = null,
+        private ?CacheItemPoolInterface $cache = null,
+        private int                     $defaultTtl = 0,         // seconds; 0 => no expiration
+        private string                  $baseUriForKey = '',  // avoid key collisions across hosts
     ) {}
 
     public function getName(): string { return $this->name; }
@@ -40,6 +40,7 @@ final class LibreTranslateEngine implements TranslatorEngineInterface
             'q'      => $req->text,
             'source' => $req->source,
             'target' => $req->target,
+            'alternatives' => 3,
             'format' => $req->html ? 'html' : 'text',
         ] + ($this->apiKey ? ['api_key' => $this->apiKey] : []) + $req->extra;
 
@@ -54,9 +55,32 @@ final class LibreTranslateEngine implements TranslatorEngineInterface
             $arr = $resp->toArray();
             return $arr;
         });
+        dump($data);
+        $translatedText = $data['translatedText'] ?? '';
+        if ($translatedText === $req->text) {
+            if (count($data['alternatives']??[])) {
+                $translatedText = $data['alternatives'][0];
+                // hack to fix this:
+                /*
+                {
+    "alternatives": [
+        "c) calendario",
+        "c) hora",
+        "c) plantilla"
+    ],
+    "detectedLanguage": {
+        "confidence": 90,
+        "language": "en"
+    },
+    "translatedText": "timeline"
+}
+                */
+                $translatedText = trim(preg_replace('/.*?\)/', '', $translatedText));
+            }
+        }
 
         return new TranslationResult(
-            translatedText: $data['translatedText'] ?? '',
+            translatedText: $translatedText,
             detectedSource: $data['detectedLanguage']['language'] ?? ($req->source === 'auto' ? 'auto' : $req->source),
             meta: ['engine' => $this->name]
         );

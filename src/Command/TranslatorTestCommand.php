@@ -11,10 +11,12 @@ use Symfony\Component\Console\Attribute\Option;
 use Symfony\Component\Console\Style\SymfonyStyle;
 use Symfony\Component\Console\Command\Command;
 
-#[AsCommand('survos:translator:test', 'Quick smoke test for one or more engines')]
+#[AsCommand('survos:translate', 'Quick smoke test for one or more engines')]
 final class TranslatorTestCommand
 {
-    public function __construct(private readonly TranslatorManager $manager) {}
+    public function __construct(
+        private readonly TranslatorManager $manager
+    ) {}
 
     public function __invoke(
         SymfonyStyle $io,
