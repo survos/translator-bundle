@@ -55,7 +55,6 @@ final readonly class LibreTranslateEngine implements TranslatorEngineInterface
             $arr = $resp->toArray();
             return $arr;
         });
-        dump($data);
         $translatedText = $data['translatedText'] ?? '';
         if ($translatedText === $req->text) {
             if (count($data['alternatives']??[])) {
