@@ -113,7 +113,6 @@ INFO)
             $builder->autowire($class)
                 ->setAutoconfigured(true)
                 ->addTag('console.command');
-
         }
 
         // Optional cache pool
