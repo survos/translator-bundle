@@ -1,38 +1,38 @@
 {
-  "name": "survos/translator-bundle",
-  "description": "Engine-agnostic translation client bundle (Symfony 7.3 / PHP 8.4) with LibreTranslate adapter and optional caching.",
-  "type": "symfony-bundle",
-  "license": "MIT",
-  "require": {
-    "php": "^8.4",
-    "psr/cache": "^3.0",
-    "psr/container": "^2.0",
-    "symfony/cache": "^7.3",
-    "symfony/config": "^7.3",
-    "symfony/console": "^7.3",
-    "symfony/dependency-injection": "^7.3",
-    "symfony/http-client": "^7.3",
-    "symfony/string": "^7.3",
-    "symfony/http-kernel": "^7.3"
-  },
-  "require-dev": {
-    "phpunit/phpunit": "^12"
-  },
-  "autoload": {
-    "psr-4": {
-      "Survos\\TranslatorBundle\\": "src/"
-    }
-  },
-  "autoload-dev": {
-    "psr-4": {
-      "Survos\\TranslatorBundle\\Tests\\": "tests/"
-    }
-  },
-  "minimum-stability": "stable",
-  "prefer-stable": true,
-  "extra": {
-    "branch-alias": {
-      "dev-main": "0.1-dev"
-    }
-  }
+    "name": "survos/translator-bundle",
+    "description": "Engine-agnostic translation client bundle (Symfony 7.3 / PHP 8.4) with LibreTranslate adapter and optional caching.",
+    "license": "MIT",
+    "type": "symfony-bundle",
+    "require": {
+        "php": "^8.4",
+        "psr/cache": "^3.0",
+        "psr/container": "^2.0",
+        "symfony/cache": "^7.3||^8.0",
+        "symfony/config": "^7.3||^8.0",
+        "symfony/console": "^7.3||^8.0",
+        "symfony/dependency-injection": "^7.3||^8.0",
+        "symfony/http-client": "^7.3||^8.0",
+        "symfony/string": "^7.3||^8.0",
+        "symfony/http-kernel": "^7.3||^8.0"
+    },
+    "require-dev": {
+        "phpunit/phpunit": "^12"
+    },
+    "autoload": {
+        "psr-4": {
+            "Survos\\TranslatorBundle\\": "src/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "Survos\\TranslatorBundle\\Tests\\": "tests/"
+        }
+    },
+    "extra": {
+        "branch-alias": {
+            "dev-main": "0.1-dev"
+        }
+    },
+    "minimum-stability": "stable",
+    "prefer-stable": true
 }
