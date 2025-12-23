@@ -14,7 +14,7 @@
         "symfony/http-client": "^7.3||^8.0",
         "symfony/string": "^7.3||^8.0",
         "symfony/http-kernel": "^7.3||^8.0",
-        "survos/lingua-core": "dev-main"
+        "survos/lingua-core": "^2.0"
     },
     "require-dev": {
         "phpunit/phpunit": "^12"
