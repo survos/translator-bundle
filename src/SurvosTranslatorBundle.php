@@ -12,6 +12,7 @@ use Survos\TranslatorBundle\Service\{TranslatorRegistry, TranslatorManager};
 use Symfony\Component\Config\Definition\Configurator\DefinitionConfigurator;
 use Symfony\Component\DependencyInjection\Argument\ServiceLocatorArgument;
 use Symfony\Component\DependencyInjection\Compiler\CompilerPassInterface;
+use Symfony\Component\DependencyInjection\Compiler\PassConfig;
 use Symfony\Component\DependencyInjection\ContainerBuilder;
 use Symfony\Component\DependencyInjection\Loader\Configurator\ContainerConfigurator;
 use Symfony\Component\DependencyInjection\Reference;
@@ -212,7 +213,7 @@ INFO)
     public function build(ContainerBuilder $container): void
     {
         parent::build($container);
-        $container->addCompilerPass($this);
+        $container->addCompilerPass($this, PassConfig::TYPE_BEFORE_OPTIMIZATION);
     }
 
     public function process(ContainerBuilder $container): void
