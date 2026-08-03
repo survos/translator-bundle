@@ -8,6 +8,7 @@ use Psr\Cache\CacheItemPoolInterface;
 use Survos\TranslatorBundle\Engine\LibreTranslateEngine;
 use Survos\TranslatorBundle\Engine\DeepLEngine;
 use Survos\TranslatorBundle\Engine\GoogleTranslateEngine;
+use Survos\TranslatorBundle\Retry\RateLimitAwareRetryStrategy;
 use Survos\TranslatorBundle\Service\{TranslatorRegistry, TranslatorManager};
 use Symfony\Component\Config\Definition\Configurator\DefinitionConfigurator;
 use Symfony\Component\DependencyInjection\Argument\ServiceLocatorArgument;
@@ -17,7 +18,6 @@ use Symfony\Component\DependencyInjection\ContainerBuilder;
 use Symfony\Component\DependencyInjection\Loader\Configurator\ContainerConfigurator;
 use Symfony\Component\DependencyInjection\Reference;
 use Symfony\Component\HttpKernel\Bundle\AbstractBundle;
-use Symfony\Contracts\HttpClient\HttpClientInterface;
 
 final class SurvosTranslatorBundle extends AbstractBundle implements CompilerPassInterface
 {
@@ -103,6 +103,88 @@ INFO)
             ->end();
     }
     /**
+     * The scoped HttpClient for each configured engine is defined in the FRAMEWORK
+     * (framework.yaml's http_client.scoped_clients), not built by hand here — this is where
+     * base_uri gets resolved per engine and where retry_failed is turned on, so every engine
+     * gets the full stock Symfony HttpClient decorator stack (scoping, retry, tracing, ...) for
+     * free instead of us re-implementing a slice of it. loadExtension() below just references
+     * the resulting client by name; it never constructs one.
+     *
+     * prependExtension() runs before this bundle's own Configuration tree is normally resolved,
+     * so the engines list is read as raw config via getExtensionConfig() -- same pattern as
+     * SurvosLocBundle's single scoped client, extended here to one scoped client per
+     * dynamically-configured engine name.
+     */
+    public function prependExtension(ContainerConfigurator $container, ContainerBuilder $builder): void
+    {
+        parent::prependExtension($container, $builder);
+
+        $config = self::rawConfig($builder);
+        $scopedClients = [];
+        foreach ($config['engines'] ?? [] as $name => $cfg) {
+            $baseUri = self::resolveBaseUri((string)($cfg['type'] ?? ''), $cfg);
+            if ($baseUri === '') {
+                continue; // no base_uri resolvable (e.g. libre with no host configured yet) -- nothing to scope
+            }
+
+            $scopedClients[self::clientId($name)] = [
+                'base_uri' => $baseUri,
+                // Any engine (libre/deepl/google/...) can be rate-limited by its remote API --
+                // retried at the HTTP client layer, not just Messenger's transport-level retry
+                // (which just re-fires the identical request and can collapse into a storm).
+                'retry_failed' => [
+                    'enabled' => true,
+                    // http_codes/delay/multiplier/etc. can't be combined with retry_strategy --
+                    // RateLimitAwareRetryStrategy owns which codes retry (inherits
+                    // GenericRetryStrategy::DEFAULT_RETRY_STATUS_CODES, a superset including
+                    // 429/500/502/503/504) and honors a Retry-After header on top of that
+                    // instead of always falling back to blind exponential backoff.
+                    'retry_strategy' => RateLimitAwareRetryStrategy::class,
+                ],
+            ];
+        }
+
+        if ($scopedClients !== []) {
+            $builder->prependExtensionConfig('framework', [
+                'http_client' => ['scoped_clients' => $scopedClients],
+            ]);
+        }
+    }
+
+    private static function clientId(string $engineName): string
+    {
+        return sprintf('survos_translator.%s', $engineName);
+    }
+
+    /** @param array<string,mixed> $cfg */
+    private static function resolveBaseUri(string $type, array $cfg): string
+    {
+        $baseUri = (string)($cfg['base_uri'] ?? '');
+        if ($baseUri !== '') {
+            return $baseUri;
+        }
+
+        return match ($type) {
+            'deepl' => strtolower((string)($cfg['plan'] ?? 'free')) === 'pro'
+                ? 'https://api.deepl.com'
+                : 'https://api-free.deepl.com',
+            'google' => 'https://translation.googleapis.com',
+            default => '', // libre (self-hosted) and unknown types must set base_uri explicitly
+        };
+    }
+
+    /** Reads `survos_translator.*` before the config tree is processed — see SurvosLocBundle for the same pattern. */
+    private static function rawConfig(ContainerBuilder $builder): array
+    {
+        $merged = [];
+        foreach ($builder->getExtensionConfig('survos_translator') as $config) {
+            $merged = array_merge($merged, $config);
+        }
+
+        return $merged;
+    }
+
+    /**
      * @param array<string,mixed> $config
      */
     public function loadExtension(array $config, ContainerConfigurator $container, ContainerBuilder $builder): void
@@ -115,6 +197,9 @@ INFO)
                 ->setAutoconfigured(true)
                 ->addTag('console.command');
         }
+        // Referenced by name from prependExtension()'s retry_failed.retry_strategy config --
+        // one shared, stateless instance covers every engine's scoped client.
+        $builder->autowire(RateLimitAwareRetryStrategy::class)->setPublic(false);
 
         // Optional cache pool
         $cacheRef = null;
@@ -128,25 +213,10 @@ INFO)
         $engineServiceIds = [];
         foreach ($config['engines'] ?? [] as $name => $cfg) {
             $type = (string)$cfg['type'];
-
-            // Compute default base URIs if not provided
-            $baseUri = (string)($cfg['base_uri'] ?? '');
-            if ($baseUri === '') {
-                if ($type === 'deepl') {
-                    $plan = strtolower((string)($cfg['plan'] ?? 'free'));
-                    $baseUri = $plan === 'pro' ? 'https://api.deepl.com' : 'https://api-free.deepl.com';
-                } elseif ($type === 'google') {
-                    $baseUri = 'https://translation.googleapis.com';
-                }
-                // libre/google with custom hosts are still supported via base_uri in config
-            }
-
-            // Scoped HttpClient for this engine
-            $clientId = sprintf('survos.translator.http_client.%s', $name);
-            $builder->register($clientId, HttpClientInterface::class)
-                ->setFactory([new Reference('http_client'), 'withOptions'])
-                ->setArguments([[ 'base_uri' => $baseUri ?: ($cfg['base_uri'] ?? null) ]])
-                ->setPublic(false);
+            $baseUri = self::resolveBaseUri($type, $cfg);
+            // The scoped, retry-wrapped client prepended into framework.yaml above -- built by
+            // FrameworkBundle itself, not by this bundle.
+            $clientRef = new Reference(self::clientId($name));
 
             $engineId = null;
 
@@ -154,7 +224,7 @@ INFO)
                 $engineId = sprintf('survos.translator.engine.%s', $name);
                 $builder->register($engineId, LibreTranslateEngine::class)
                     ->setArguments([
-                        new Reference($clientId),
+                        $clientRef,
                         $name,
                         $cfg['api_key'] ?? null,
                         $cacheRef,              // ?CacheItemPoolInterface
@@ -166,7 +236,7 @@ INFO)
                 $engineId = sprintf('survos.translator.engine.%s', $name);
                 $builder->register($engineId, DeepLEngine::class)
                     ->setArguments([
-                        new Reference($clientId),
+                        $clientRef,
                         $name,
                         $cfg['api_key'] ?? null,
                         $cacheRef,
@@ -178,7 +248,7 @@ INFO)
                 $engineId = sprintf('survos.translator.engine.%s', $name);
                 $builder->register($engineId, GoogleTranslateEngine::class)
                     ->setArguments([
-                        new Reference($clientId),
+                        $clientRef,
                         $name,
                         $cfg['api_key'] ?? null,
                         $cacheRef,
