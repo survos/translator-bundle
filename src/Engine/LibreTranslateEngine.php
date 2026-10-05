@@ -81,7 +81,7 @@ final readonly class LibreTranslateEngine implements TranslatorEngineInterface
         return new TranslationResult(
             translatedText: $translatedText,
             detectedSource: $data['detectedLanguage']['language'] ?? ($req->source === 'auto' ? 'auto' : $req->source),
-            meta: ['engine' => $this->name]
+            meta: ['engine' => $this->name] + array_intersect_key($data, array_flip(['model', 'revision', 'provider', 'profileVersion']))
         );
     }
 
@@ -109,7 +109,7 @@ final readonly class LibreTranslateEngine implements TranslatorEngineInterface
         return new TranslationBatchResult(
             translatedTexts: $data['translatedText'] ?? [],
             detectedSource: $data['detectedLanguage'] ?? ($req->source === 'auto' ? 'auto' : $req->source),
-            meta: ['engine' => $this->name]
+            meta: ['engine' => $this->name] + array_intersect_key($data, array_flip(['model', 'revision', 'provider', 'profileVersion']))
         );
     }
 
