@@ -1,4 +1,5 @@
 <?php
+
 declare(strict_types=1);
 
 namespace Survos\TranslatorBundle\Model;
@@ -15,5 +16,6 @@ final class TranslationRequest
         public readonly bool $html = false,
         public readonly ?string $glossaryId = null,
         public readonly array $extra = [],
-    ) {}
+    ) {
+    }
 }

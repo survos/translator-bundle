@@ -1,4 +1,5 @@
 <?php
+
 declare(strict_types=1);
 
 namespace Survos\TranslatorBundle\Engine;
@@ -6,14 +7,12 @@ namespace Survos\TranslatorBundle\Engine;
 use Psr\Cache\CacheItemPoolInterface;
 use Survos\TranslatorBundle\Contract\TranslatorEngineInterface;
 use Survos\TranslatorBundle\Exception\EngineHttpException;
-use Survos\TranslatorBundle\Model\{
-    EngineCapabilities,
-    LanguageDetectionResult,
-    TranslationBatchRequest,
-    TranslationBatchResult,
-    TranslationRequest,
-    TranslationResult
-};
+use Survos\TranslatorBundle\Model\EngineCapabilities;
+use Survos\TranslatorBundle\Model\LanguageDetectionResult;
+use Survos\TranslatorBundle\Model\TranslationBatchRequest;
+use Survos\TranslatorBundle\Model\TranslationBatchResult;
+use Survos\TranslatorBundle\Model\TranslationRequest;
+use Survos\TranslatorBundle\Model\TranslationResult;
 use Symfony\Contracts\HttpClient\HttpClientInterface;
 
 final class GoogleTranslateEngine implements TranslatorEngineInterface
@@ -25,9 +24,13 @@ final class GoogleTranslateEngine implements TranslatorEngineInterface
         private readonly ?CacheItemPoolInterface $cache = null,
         private readonly int $defaultTtl = 0,
         private readonly string $baseUriForKey = '',
-    ) {}
+    ) {
+    }
 
-    public function getName(): string { return $this->name; }
+    public function getName(): string
+    {
+        return $this->name;
+    }
 
     public function capabilities(): EngineCapabilities
     {
@@ -37,7 +40,7 @@ final class GoogleTranslateEngine implements TranslatorEngineInterface
     public function translate(TranslationRequest $req): TranslationResult
     {
         $payload = [
-            'q'      => $req->text,
+            'q' => $req->text,
             'source' => $req->source,
             'target' => $req->target,
             'format' => $req->html ? 'html' : 'text',
@@ -48,7 +51,7 @@ final class GoogleTranslateEngine implements TranslatorEngineInterface
         $data = $this->cachedArray($key, function () use ($payload): array {
             $resp = $this->client->request('POST', '/language/translate/v2', [
                 'query' => $this->apiKey ? ['key' => $this->apiKey] : [],
-                'json'  => $payload,
+                'json' => $payload,
             ]);
             $status = $resp->getStatusCode();
             if ($status >= 400) {
@@ -56,14 +59,15 @@ final class GoogleTranslateEngine implements TranslatorEngineInterface
             }
             /** @var array{data?: array{translations?: array<int, array{translatedText:string, detectedSourceLanguage?:string}>}} $arr */
             $arr = $resp->toArray();
+
             return $arr;
         });
 
         $first = $data['data']['translations'][0] ?? ['translatedText' => '', 'detectedSourceLanguage' => $req->source];
 
         return new TranslationResult(
-            translatedText: (string)($first['translatedText'] ?? ''),
-            detectedSource: (string)($first['detectedSourceLanguage'] ?? ($req->source === 'auto' ? 'auto' : $req->source)),
+            translatedText: (string) ($first['translatedText'] ?? ''),
+            detectedSource: (string) ($first['detectedSourceLanguage'] ?? ('auto' === $req->source ? 'auto' : $req->source)),
             meta: ['engine' => $this->name]
         );
     }
@@ -71,7 +75,7 @@ final class GoogleTranslateEngine implements TranslatorEngineInterface
     public function translateBatch(TranslationBatchRequest $req): TranslationBatchResult
     {
         $payload = [
-            'q'      => array_values($req->texts),
+            'q' => array_values($req->texts),
             'source' => $req->source,
             'target' => $req->target,
             'format' => $req->html ? 'html' : 'text',
@@ -82,7 +86,7 @@ final class GoogleTranslateEngine implements TranslatorEngineInterface
         $data = $this->cachedArray($key, function () use ($payload): array {
             $resp = $this->client->request('POST', '/language/translate/v2', [
                 'query' => $this->apiKey ? ['key' => $this->apiKey] : [],
-                'json'  => $payload,
+                'json' => $payload,
             ]);
             $status = $resp->getStatusCode();
             if ($status >= 400) {
@@ -90,19 +94,20 @@ final class GoogleTranslateEngine implements TranslatorEngineInterface
             }
             /** @var array{data?: array{translations?: array<int, array{translatedText:string, detectedSourceLanguage?:string}>}} $arr */
             $arr = $resp->toArray();
+
             return $arr;
         });
 
         $translations = $data['data']['translations'] ?? [];
         $texts = [];
-        $detected = $req->source === 'auto' ? ($translations[0]['detectedSourceLanguage'] ?? 'auto') : $req->source;
+        $detected = 'auto' === $req->source ? ($translations[0]['detectedSourceLanguage'] ?? 'auto') : $req->source;
         foreach ($translations as $tr) {
-            $texts[] = (string)($tr['translatedText'] ?? '');
+            $texts[] = (string) ($tr['translatedText'] ?? '');
         }
 
         return new TranslationBatchResult(
             translatedTexts: $texts,
-            detectedSource: (string)$detected,
+            detectedSource: (string) $detected,
             meta: ['engine' => $this->name]
         );
     }
@@ -115,7 +120,7 @@ final class GoogleTranslateEngine implements TranslatorEngineInterface
         $data = $this->cachedArray($key, function () use ($payload): array {
             $resp = $this->client->request('POST', '/language/translate/v2/detect', [
                 'query' => $this->apiKey ? ['key' => $this->apiKey] : [],
-                'json'  => $payload,
+                'json' => $payload,
             ]);
             $status = $resp->getStatusCode();
             if ($status >= 400) {
@@ -123,14 +128,15 @@ final class GoogleTranslateEngine implements TranslatorEngineInterface
             }
             /** @var array{data?: array{detections?: array<int, array<int, array{language:string, confidence:float}>>>}} $arr */
             $arr = $resp->toArray();
+
             return $arr;
         });
 
         $first = $data['data']['detections'][0][0] ?? ['language' => 'und', 'confidence' => 0.0];
 
         return new LanguageDetectionResult(
-            language: (string)($first['language'] ?? 'und'),
-            confidence: (float)($first['confidence'] ?? 0.0),
+            language: (string) ($first['language'] ?? 'und'),
+            confidence: (float) ($first['confidence'] ?? 0.0),
             meta: ['engine' => $this->name]
         );
     }
@@ -139,16 +145,18 @@ final class GoogleTranslateEngine implements TranslatorEngineInterface
     private function cacheKey(string $op, array $payload): string
     {
         $hash = hash('xxh3', json_encode([
-            'op'      => $op,
-            'name'    => $this->name,
-            'base'    => $this->baseUriForKey,
+            'op' => $op,
+            'name' => $this->name,
+            'base' => $this->baseUriForKey,
             'payload' => $payload,
         ], JSON_THROW_ON_ERROR));
+
         return "survos.translator.google.$op.$hash";
     }
 
     /**
      * @param callable():array $producer
+     *
      * @return array<mixed>
      */
     private function cachedArray(string $key, callable $producer): array
@@ -169,6 +177,7 @@ final class GoogleTranslateEngine implements TranslatorEngineInterface
             $item->expiresAfter($this->defaultTtl);
         }
         $this->cache->save($item);
+
         return $data;
     }
 }

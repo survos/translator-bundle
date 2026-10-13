@@ -1,4 +1,5 @@
 <?php
+
 declare(strict_types=1);
 
 namespace Survos\TranslatorBundle\Model;
@@ -13,5 +14,6 @@ final class EngineCapabilities
         public readonly bool $supportsHtml = true,
         public readonly ?int $maxCharsPerRequest = null,
         public readonly array $meta = [],
-    ) {}
+    ) {
+    }
 }

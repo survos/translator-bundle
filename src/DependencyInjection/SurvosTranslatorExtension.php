@@ -1,18 +1,20 @@
 <?php
+
 declare(strict_types=1);
 
 namespace Survos\TranslatorBundle\DependencyInjection;
 
 use Survos\TranslatorBundle\Engine\LibreTranslateEngine;
-use Survos\TranslatorBundle\Service\{TranslatorRegistry, TranslatorManager};
+use Survos\TranslatorBundle\Service\TranslatorManager;
+use Survos\TranslatorBundle\Service\TranslatorRegistry;
+use Symfony\Component\Config\FileLocator;
 use Symfony\Component\DependencyInjection\Argument\ServiceLocatorArgument;
 use Symfony\Component\DependencyInjection\ContainerBuilder;
 use Symfony\Component\DependencyInjection\Definition;
-use Symfony\Component\Config\FileLocator;
 use Symfony\Component\DependencyInjection\Extension\Extension;
 use Symfony\Component\DependencyInjection\Loader\PhpFileLoader;
-use Symfony\Contracts\HttpClient\HttpClientInterface;
 use Symfony\Component\DependencyInjection\Reference;
+use Symfony\Contracts\HttpClient\HttpClientInterface;
 
 final class SurvosTranslatorExtension extends Extension
 {
@@ -31,12 +33,14 @@ final class SurvosTranslatorExtension extends Extension
             $clientDef = new Definition(HttpClientInterface::class);
             $clientDef->setFactory([new Reference('http_client'), 'withOptions']);
             $options = [];
-            if (!empty($cfg['base_uri'])) $options['base_uri'] = $cfg['base_uri'];
+            if (!empty($cfg['base_uri'])) {
+                $options['base_uri'] = $cfg['base_uri'];
+            }
             $clientDef->setArguments([$options]);
             $clientId = sprintf('survos.translator.http_client.%s', $name);
             $container->setDefinition($clientId, $clientDef);
 
-            if ($type === 'libre') {
+            if ('libre' === $type) {
                 $engineDef = new Definition(LibreTranslateEngine::class);
                 $engineDef
                     ->setArguments([
@@ -66,7 +70,7 @@ final class SurvosTranslatorExtension extends Extension
         $registryDef->setArguments([
             $locatorArg,
             $engineServiceIds,
-            $config['default_engine'] ?? 'default'
+            $config['default_engine'] ?? 'default',
         ])->setPublic(true);
     }
 }

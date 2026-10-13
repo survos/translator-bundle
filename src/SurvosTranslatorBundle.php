@@ -1,15 +1,17 @@
 <?php
+
 declare(strict_types=1);
 
 namespace Survos\TranslatorBundle;
 
-use Survos\TranslatorBundle\Command\TranslatorTestCommand;
 use Psr\Cache\CacheItemPoolInterface;
-use Survos\TranslatorBundle\Engine\LibreTranslateEngine;
+use Survos\TranslatorBundle\Command\TranslatorTestCommand;
 use Survos\TranslatorBundle\Engine\DeepLEngine;
 use Survos\TranslatorBundle\Engine\GoogleTranslateEngine;
+use Survos\TranslatorBundle\Engine\LibreTranslateEngine;
 use Survos\TranslatorBundle\Retry\RateLimitAwareRetryStrategy;
-use Survos\TranslatorBundle\Service\{TranslatorRegistry, TranslatorManager};
+use Survos\TranslatorBundle\Service\TranslatorManager;
+use Survos\TranslatorBundle\Service\TranslatorRegistry;
 use Symfony\Component\Config\Definition\Configurator\DefinitionConfigurator;
 use Symfony\Component\DependencyInjection\Argument\ServiceLocatorArgument;
 use Symfony\Component\DependencyInjection\Compiler\CompilerPassInterface;
@@ -21,7 +23,7 @@ use Symfony\Component\HttpKernel\Bundle\AbstractBundle;
 
 final class SurvosTranslatorBundle extends AbstractBundle implements CompilerPassInterface
 {
-public function configure(DefinitionConfigurator $definition): void
+    public function configure(DefinitionConfigurator $definition): void
     {
         $definition->rootNode()
             ->children()
@@ -77,7 +79,7 @@ INFO)
                     ->arrayPrototype()
                         ->children()
                             ->enumNode('type')
-                                ->values(['libre','bing','deepl','google'])
+                                ->values(['libre', 'bing', 'deepl', 'google'])
                                 ->isRequired()
                                 ->info('Provider. API key is REQUIRED for deepl/google/bing; optional for libre.')
                             ->end()
@@ -102,6 +104,7 @@ INFO)
                 ->end()
             ->end();
     }
+
     /**
      * The scoped HttpClient for each configured engine is defined in the FRAMEWORK
      * (framework.yaml's http_client.scoped_clients), not built by hand here — this is where
@@ -122,8 +125,8 @@ INFO)
         $config = self::rawConfig($builder);
         $scopedClients = [];
         foreach ($config['engines'] ?? [] as $name => $cfg) {
-            $baseUri = self::resolveBaseUri((string)($cfg['type'] ?? ''), $cfg);
-            if ($baseUri === '') {
+            $baseUri = self::resolveBaseUri((string) ($cfg['type'] ?? ''), $cfg);
+            if ('' === $baseUri) {
                 continue; // no base_uri resolvable (e.g. libre with no host configured yet) -- nothing to scope
             }
 
@@ -144,7 +147,7 @@ INFO)
             ];
         }
 
-        if ($scopedClients !== []) {
+        if ([] !== $scopedClients) {
             $builder->prependExtensionConfig('framework', [
                 'http_client' => ['scoped_clients' => $scopedClients],
             ]);
@@ -159,13 +162,13 @@ INFO)
     /** @param array<string,mixed> $cfg */
     private static function resolveBaseUri(string $type, array $cfg): string
     {
-        $baseUri = (string)($cfg['base_uri'] ?? '');
-        if ($baseUri !== '') {
+        $baseUri = (string) ($cfg['base_uri'] ?? '');
+        if ('' !== $baseUri) {
             return $baseUri;
         }
 
         return match ($type) {
-            'deepl' => strtolower((string)($cfg['plan'] ?? 'free')) === 'pro'
+            'deepl' => 'pro' === strtolower((string) ($cfg['plan'] ?? 'free'))
                 ? 'https://api.deepl.com'
                 : 'https://api-free.deepl.com',
             'google' => 'https://translation.googleapis.com',
@@ -204,15 +207,15 @@ INFO)
         // Optional cache pool
         $cacheRef = null;
         $cachePoolId = $config['cache']['pool'] ?? null;
-        $defaultTtl  = (int)($config['cache']['ttl'] ?? 0);
-        if (\is_string($cachePoolId) && $cachePoolId !== '') {
+        $defaultTtl = (int) ($config['cache']['ttl'] ?? 0);
+        if (\is_string($cachePoolId) && '' !== $cachePoolId) {
             $cacheRef = new Reference($cachePoolId);
         }
 
         // Register engines
         $engineServiceIds = [];
         foreach ($config['engines'] ?? [] as $name => $cfg) {
-            $type = (string)$cfg['type'];
+            $type = (string) $cfg['type'];
             $baseUri = self::resolveBaseUri($type, $cfg);
             // The scoped, retry-wrapped client prepended into framework.yaml above -- built by
             // FrameworkBundle itself, not by this bundle.
@@ -220,7 +223,7 @@ INFO)
 
             $engineId = null;
 
-            if ($type === 'libre') {
+            if ('libre' === $type) {
                 $engineId = sprintf('survos.translator.engine.%s', $name);
                 $builder->register($engineId, LibreTranslateEngine::class)
                     ->setArguments([
@@ -229,10 +232,10 @@ INFO)
                         $cfg['api_key'] ?? null,
                         $cacheRef,              // ?CacheItemPoolInterface
                         $defaultTtl,            // int
-                        (string)$baseUri,
+                        (string) $baseUri,
                     ])
                     ->setPublic(false);
-            } elseif ($type === 'deepl') {
+            } elseif ('deepl' === $type) {
                 $engineId = sprintf('survos.translator.engine.%s', $name);
                 $builder->register($engineId, DeepLEngine::class)
                     ->setArguments([
@@ -241,10 +244,10 @@ INFO)
                         $cfg['api_key'] ?? null,
                         $cacheRef,
                         $defaultTtl,
-                        (string)$baseUri,
+                        (string) $baseUri,
                     ])
                     ->setPublic(false);
-            } elseif ($type === 'google') {
+            } elseif ('google' === $type) {
                 $engineId = sprintf('survos.translator.engine.%s', $name);
                 $builder->register($engineId, GoogleTranslateEngine::class)
                     ->setArguments([
@@ -253,7 +256,7 @@ INFO)
                         $cfg['api_key'] ?? null,
                         $cacheRef,
                         $defaultTtl,
-                        (string)$baseUri,
+                        (string) $baseUri,
                     ])
                     ->setPublic(false);
             } else {
@@ -273,7 +276,7 @@ INFO)
             ->setArguments([
                 new ServiceLocatorArgument($locatorMap),
                 $engineServiceIds,
-                (string)($config['default_engine'] ?? 'default'),
+                (string) ($config['default_engine'] ?? 'default'),
             ]);
 
         // Make engine map available to compiler pass
@@ -297,7 +300,7 @@ INFO)
         $iface = 'Survos\\TranslatorBundle\\Contract\\TranslatorEngineInterface';
         foreach ($map as $name => $serviceId) {
             $varBase = $this->camelize($name);            // e.g. libre_local -> libreLocal
-            $var     = $varBase.'Translator';             // e.g. $libreLocalTranslator
+            $var = $varBase.'Translator';             // e.g. $libreLocalTranslator
             $aliasId = $iface.' $'.$var;                  // autowire-by-name alias id
 
             if (!$container->hasAlias($aliasId)) {
@@ -317,7 +320,8 @@ INFO)
         $name = str_replace(['-', '.'], '_', $name);
         $parts = array_filter(explode('_', $name), 'strlen');
         $first = array_shift($parts) ?? '';
-        $rest = array_map(static fn($p) => ucfirst(strtolower($p)), $parts);
-        return strtolower($first) . implode('', $rest);
+        $rest = array_map(static fn ($p) => ucfirst(strtolower($p)), $parts);
+
+        return strtolower($first).implode('', $rest);
     }
 }

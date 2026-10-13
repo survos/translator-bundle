@@ -1,4 +1,5 @@
 <?php
+
 declare(strict_types=1);
 
 namespace Survos\TranslatorBundle\Model;
@@ -10,7 +11,8 @@ final class TranslationResult
      */
     public function __construct(
         public readonly string $translatedText,
-        public readonly ?string $detectedSource=null,
+        public readonly ?string $detectedSource = null,
         public readonly array $meta = [],
-    ) {}
+    ) {
+    }
 }

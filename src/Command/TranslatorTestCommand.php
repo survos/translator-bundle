@@ -1,22 +1,24 @@
 <?php
+
 declare(strict_types=1);
 
 namespace Survos\TranslatorBundle\Command;
 
 use Survos\TranslatorBundle\Model\TranslationRequest;
 use Survos\TranslatorBundle\Service\TranslatorManager;
-use Symfony\Component\Console\Attribute\AsCommand;
 use Symfony\Component\Console\Attribute\Argument;
+use Symfony\Component\Console\Attribute\AsCommand;
 use Symfony\Component\Console\Attribute\Option;
-use Symfony\Component\Console\Style\SymfonyStyle;
 use Symfony\Component\Console\Command\Command;
+use Symfony\Component\Console\Style\SymfonyStyle;
 
 #[AsCommand('survos:translate', 'Quick smoke test for one or more engines')]
 final class TranslatorTestCommand
 {
     public function __construct(
-        private readonly TranslatorManager $manager
-    ) {}
+        private readonly TranslatorManager $manager,
+    ) {
+    }
 
     public function __invoke(
         SymfonyStyle $io,
@@ -30,8 +32,9 @@ final class TranslatorTestCommand
         $names = $this->manager->names();
 
         if ($all) {
-            if (\count($names) === 0) {
+            if (0 === \count($names)) {
                 $io->error('No translator engines are configured.');
+
                 return Command::FAILURE;
             }
             $rows = [];
@@ -41,15 +44,17 @@ final class TranslatorTestCommand
                 $rows[] = [$eng->getName(), $res->detectedSource, $res->translatedText];
             }
             $io->table(['Engine', 'Detected', 'Translation'], $rows);
+
             return Command::SUCCESS;
         }
 
         // Single engine path
-        if ($engine === null) {
-            if (\count($names) === 0) {
+        if (null === $engine) {
+            if (0 === \count($names)) {
                 $io->error('No translator engines are configured.');
+
                 return Command::FAILURE;
-            } elseif (\count($names) === 1) {
+            } elseif (1 === \count($names)) {
                 $engine = $names[0];
             } else {
                 $default = $this->manager->defaultName();
@@ -61,8 +66,8 @@ final class TranslatorTestCommand
         $res = $eng->translate(new TranslationRequest($text, $from, $to, $html));
 
         $io->writeln(sprintf('<info>[%s]</info> %s', $eng->getName(), $res->translatedText));
-        if ($res->detectedSource !== '' && $from === 'auto') {
-            $io->comment('Detected: ' . $res->detectedSource);
+        if ('' !== $res->detectedSource && 'auto' === $from) {
+            $io->comment('Detected: '.$res->detectedSource);
         }
 
         return Command::SUCCESS;

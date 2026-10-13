@@ -1,13 +1,15 @@
 <?php
+
 declare(strict_types=1);
 
 namespace Survos\TranslatorBundle\Contract;
 
-use Survos\TranslatorBundle\Model\{
-    TranslationRequest, TranslationResult,
-    TranslationBatchRequest, TranslationBatchResult,
-    LanguageDetectionResult, EngineCapabilities
-};
+use Survos\TranslatorBundle\Model\EngineCapabilities;
+use Survos\TranslatorBundle\Model\LanguageDetectionResult;
+use Survos\TranslatorBundle\Model\TranslationBatchRequest;
+use Survos\TranslatorBundle\Model\TranslationBatchResult;
+use Survos\TranslatorBundle\Model\TranslationRequest;
+use Survos\TranslatorBundle\Model\TranslationResult;
 
 interface TranslatorEngineInterface
 {

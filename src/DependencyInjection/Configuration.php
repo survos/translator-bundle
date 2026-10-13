@@ -1,4 +1,5 @@
 <?php
+
 declare(strict_types=1);
 
 namespace Survos\TranslatorBundle\DependencyInjection;
@@ -20,7 +21,7 @@ final class Configuration implements ConfigurationInterface
                     ->useAttributeAsKey('name')
                     ->arrayPrototype()
                         ->children()
-                            ->enumNode('type')->values(['libre','bing','deepl','google'])->isRequired()->end()
+                            ->enumNode('type')->values(['libre', 'bing', 'deepl', 'google'])->isRequired()->end()
                             ->scalarNode('base_uri')->defaultNull()->end()
                             ->scalarNode('api_key')->defaultNull()->end()
                             ->scalarNode('region')->defaultNull()->end()

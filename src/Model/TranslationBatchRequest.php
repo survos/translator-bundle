@@ -1,4 +1,5 @@
 <?php
+
 declare(strict_types=1);
 
 namespace Survos\TranslatorBundle\Model;
@@ -6,8 +7,8 @@ namespace Survos\TranslatorBundle\Model;
 final class TranslationBatchRequest
 {
     /**
-     * @param list<string>         $texts
-     * @param array<string,mixed>  $extra
+     * @param list<string>        $texts
+     * @param array<string,mixed> $extra
      */
     public function __construct(
         public readonly array $texts,
@@ -15,5 +16,6 @@ final class TranslationBatchRequest
         public readonly string $target,
         public readonly bool $html = false,
         public readonly array $extra = [],
-    ) {}
+    ) {
+    }
 }

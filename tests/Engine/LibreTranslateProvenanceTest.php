@@ -1,12 +1,16 @@
 <?php
 
 declare(strict_types=1);
+
 namespace Survos\TranslatorBundle\Tests\Engine;
+
 use PHPUnit\Framework\TestCase;
 use Survos\TranslatorBundle\Engine\LibreTranslateEngine;
-use Survos\TranslatorBundle\Model\{TranslationBatchRequest, TranslationRequest};
+use Survos\TranslatorBundle\Model\TranslationBatchRequest;
+use Survos\TranslatorBundle\Model\TranslationRequest;
 use Symfony\Component\HttpClient\MockHttpClient;
 use Symfony\Component\HttpClient\Response\MockResponse;
+
 final class LibreTranslateProvenanceTest extends TestCase
 {
     public function testModelProvenanceSurvivesBothResponseShapesWithoutChangingProfileName(): void

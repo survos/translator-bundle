@@ -1,6 +1,10 @@
 <?php
+
+declare(strict_types=1);
+
+use Survos\TranslatorBundle\Service\TranslatorManager;
+use Survos\TranslatorBundle\Service\TranslatorRegistry;
 use Symfony\Component\DependencyInjection\Loader\Configurator\ContainerConfigurator;
-use Survos\TranslatorBundle\Service\{TranslatorRegistry, TranslatorManager};
 
 return static function (ContainerConfigurator $c): void {
     $s = $c->services()->defaults()->autowire()->autoconfigure();

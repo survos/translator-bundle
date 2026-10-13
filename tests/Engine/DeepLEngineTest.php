@@ -39,8 +39,8 @@ final class DeepLEngineTest extends TestCase
     {
         $attempt = 0;
         $mock = new MockHttpClient(function () use (&$attempt): MockResponse {
-            $attempt++;
-            if ($attempt === 1) {
+            ++$attempt;
+            if (1 === $attempt) {
                 return new MockResponse('rate limited', ['http_code' => 429, 'response_headers' => ['retry-after' => '1']]);
             }
 
@@ -82,7 +82,7 @@ final class DeepLEngineTest extends TestCase
         $requestCount = 0;
         $capturedBody = null;
         $mock = new MockHttpClient(function (string $method, string $url, array $options) use (&$requestCount, &$capturedBody): MockResponse {
-            $requestCount++;
+            ++$requestCount;
             // Symfony HttpClient urlencodes an array 'body' into a query-string-formatted string
             // before MockHttpClient's callback sees it — parse it back to inspect what was sent.
             parse_str((string) $options['body'], $capturedBody);

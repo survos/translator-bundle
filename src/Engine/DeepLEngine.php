@@ -1,4 +1,5 @@
 <?php
+
 declare(strict_types=1);
 
 namespace Survos\TranslatorBundle\Engine;
@@ -6,14 +7,12 @@ namespace Survos\TranslatorBundle\Engine;
 use Psr\Cache\CacheItemPoolInterface;
 use Survos\TranslatorBundle\Contract\TranslatorEngineInterface;
 use Survos\TranslatorBundle\Exception\EngineHttpException;
-use Survos\TranslatorBundle\Model\{
-    EngineCapabilities,
-    LanguageDetectionResult,
-    TranslationBatchRequest,
-    TranslationBatchResult,
-    TranslationRequest,
-    TranslationResult
-};
+use Survos\TranslatorBundle\Model\EngineCapabilities;
+use Survos\TranslatorBundle\Model\LanguageDetectionResult;
+use Survos\TranslatorBundle\Model\TranslationBatchRequest;
+use Survos\TranslatorBundle\Model\TranslationBatchResult;
+use Survos\TranslatorBundle\Model\TranslationRequest;
+use Survos\TranslatorBundle\Model\TranslationResult;
 use Symfony\Contracts\HttpClient\HttpClientInterface;
 
 final class DeepLEngine implements TranslatorEngineInterface
@@ -38,9 +37,13 @@ final class DeepLEngine implements TranslatorEngineInterface
         private readonly ?CacheItemPoolInterface $cache = null,
         private readonly int $defaultTtl = 0,
         private readonly string $baseUriForKey = '',
-    ) {}
+    ) {
+    }
 
-    public function getName(): string { return $this->name; }
+    public function getName(): string
+    {
+        return $this->name;
+    }
 
     public function capabilities(): EngineCapabilities
     {
@@ -52,9 +55,9 @@ final class DeepLEngine implements TranslatorEngineInterface
     {
         $body = [
             'target_lang' => strtoupper($req->target),
-            'text'        => $req->text, // FIX: send a single 'text' field (not an array)
+            'text' => $req->text, // FIX: send a single 'text' field (not an array)
         ];
-        if ($req->source !== '' && strtolower($req->source) !== 'auto') {
+        if ('' !== $req->source && 'auto' !== strtolower($req->source)) {
             $body['source_lang'] = strtoupper($req->source);
         }
         if ($req->html) {
@@ -64,7 +67,7 @@ final class DeepLEngine implements TranslatorEngineInterface
             $body['glossary_id'] = $req->glossaryId;
         }
         foreach ($req->extra as $k => $v) {
-            $body[(string)$k] = $v;
+            $body[(string) $k] = $v;
         }
 
         $key = $this->cacheKey('translate', $body);
@@ -74,8 +77,8 @@ final class DeepLEngine implements TranslatorEngineInterface
         $first = $data['translations'][0] ?? ['text' => '', 'detected_source_language' => $req->source];
 
         return new TranslationResult(
-            translatedText: (string)($first['text'] ?? ''),
-            detectedSource: (string)($first['detected_source_language'] ?? ($req->source === 'auto' ? 'auto' : $req->source)),
+            translatedText: (string) ($first['text'] ?? ''),
+            detectedSource: (string) ($first['detected_source_language'] ?? ('auto' === $req->source ? 'auto' : $req->source)),
             meta: ['engine' => $this->name]
         );
     }
@@ -84,16 +87,16 @@ final class DeepLEngine implements TranslatorEngineInterface
     {
         $body = [
             'target_lang' => strtoupper($req->target),
-            'text'        => array_values($req->texts),
+            'text' => array_values($req->texts),
         ];
-        if ($req->source !== '' && strtolower($req->source) !== 'auto') {
+        if ('' !== $req->source && 'auto' !== strtolower($req->source)) {
             $body['source_lang'] = strtoupper($req->source);
         }
         if ($req->html) {
             $body['tag_handling'] = 'html';
         }
         foreach ($req->extra as $k => $v) {
-            $body[(string)$k] = $v;
+            $body[(string) $k] = $v;
         }
 
         $key = $this->cacheKey('translateBatch', $body);
@@ -102,14 +105,14 @@ final class DeepLEngine implements TranslatorEngineInterface
 
         $translations = $data['translations'] ?? [];
         $texts = [];
-        $detected = $req->source === 'auto' ? ($translations[0]['detected_source_language'] ?? 'auto') : $req->source;
+        $detected = 'auto' === $req->source ? ($translations[0]['detected_source_language'] ?? 'auto') : $req->source;
         foreach ($translations as $tr) {
-            $texts[] = (string)($tr['text'] ?? '');
+            $texts[] = (string) ($tr['text'] ?? '');
         }
 
         return new TranslationBatchResult(
             translatedTexts: $texts,
-            detectedSource: (string)$detected,
+            detectedSource: (string) $detected,
             meta: ['engine' => $this->name]
         );
     }
@@ -118,7 +121,7 @@ final class DeepLEngine implements TranslatorEngineInterface
     {
         // DeepL has no separate detect endpoint; translate to EN (cheap) and read detected_source_language.
         $payload = [
-            'text'        => [$text],
+            'text' => [$text],
             'target_lang' => 'EN',
         ];
         $key = $this->cacheKey('detect', $payload);
@@ -126,7 +129,7 @@ final class DeepLEngine implements TranslatorEngineInterface
         $data = $this->cachedArray($key, fn (): array => $this->request($payload));
 
         $first = $data['translations'][0] ?? [];
-        $lang = (string)($first['detected_source_language'] ?? 'und');
+        $lang = (string) ($first['detected_source_language'] ?? 'und');
 
         return new LanguageDetectionResult(
             language: $lang,
@@ -137,7 +140,7 @@ final class DeepLEngine implements TranslatorEngineInterface
 
     private function authHeaders(): array
     {
-        return $this->apiKey ? ['Authorization' => 'DeepL-Auth-Key ' . $this->apiKey] : [];
+        return $this->apiKey ? ['Authorization' => 'DeepL-Auth-Key '.$this->apiKey] : [];
     }
 
     /**
@@ -156,6 +159,7 @@ final class DeepLEngine implements TranslatorEngineInterface
      *     enough for a single phrase's cooldown, without blocking a worker indefinitely.
      *
      * @param array<mixed> $body
+     *
      * @return array<mixed>
      */
     private function request(array $body, bool $isRetry = false): array
@@ -164,11 +168,11 @@ final class DeepLEngine implements TranslatorEngineInterface
 
         $resp = $this->client->request('POST', '/v2/translate', [
             'headers' => $this->authHeaders(),
-            'body'    => $body,
+            'body' => $body,
         ]);
         $status = $resp->getStatusCode();
 
-        if ($status === 429 && !$isRetry) {
+        if (429 === $status && !$isRetry) {
             $retryAfter = min(self::MAX_RETRY_WAIT, $this->parseRetryAfter($resp->getHeaders(false)));
             sleep($retryAfter);
 
@@ -176,11 +180,11 @@ final class DeepLEngine implements TranslatorEngineInterface
         }
 
         if ($status >= 400) {
-            $retryAfter = $status === 429 ? $this->parseRetryAfter($resp->getHeaders(false)) : null;
+            $retryAfter = 429 === $status ? $this->parseRetryAfter($resp->getHeaders(false)) : null;
             throw new EngineHttpException($status, $resp->getContent(false), $retryAfter);
         }
 
-        /** @var array{translations?: array<int, array{text:string, detected_source_language?:string}>} $arr */
+        /* @var array{translations?: array<int, array{text:string, detected_source_language?:string}>} $arr */
         return $resp->toArray();
     }
 
@@ -210,16 +214,18 @@ final class DeepLEngine implements TranslatorEngineInterface
     private function cacheKey(string $op, array $payload): string
     {
         $hash = hash('xxh3', json_encode([
-            'op'      => $op,
-            'name'    => $this->name,
-            'base'    => $this->baseUriForKey,
+            'op' => $op,
+            'name' => $this->name,
+            'base' => $this->baseUriForKey,
             'payload' => $payload,
         ], JSON_THROW_ON_ERROR));
+
         return "survos.translator.deepl.$op.$hash";
     }
 
     /**
      * @param callable():array $producer
+     *
      * @return array<mixed>
      */
     private function cachedArray(string $key, callable $producer): array
@@ -240,6 +246,7 @@ final class DeepLEngine implements TranslatorEngineInterface
             $item->expiresAfter($this->defaultTtl);
         }
         $this->cache->save($item);
+
         return $data;
     }
 }

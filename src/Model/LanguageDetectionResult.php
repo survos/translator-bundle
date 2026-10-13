@@ -1,4 +1,5 @@
 <?php
+
 declare(strict_types=1);
 
 namespace Survos\TranslatorBundle\Model;
@@ -12,5 +13,6 @@ final class LanguageDetectionResult
         public readonly string $language,
         public readonly float $confidence,
         public readonly array $meta = [],
-    ) {}
+    ) {
+    }
 }

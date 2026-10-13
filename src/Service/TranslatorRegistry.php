@@ -1,4 +1,5 @@
 <?php
+
 declare(strict_types=1);
 
 namespace Survos\TranslatorBundle\Service;
@@ -14,12 +15,19 @@ final class TranslatorRegistry
         private readonly ContainerInterface $locator,
         private readonly array $engineServiceIds,
         private readonly string $defaultEngine,
-    ) {}
+    ) {
+    }
 
     /** @return list<string> */
-    public function names(): array { return array_keys($this->engineServiceIds); }
+    public function names(): array
+    {
+        return array_keys($this->engineServiceIds);
+    }
 
-    public function defaultName(): string { return $this->defaultEngine; }
+    public function defaultName(): string
+    {
+        return $this->defaultEngine;
+    }
 
     public function get(string $name): TranslatorEngineInterface
     {
@@ -28,6 +36,7 @@ final class TranslatorRegistry
         }
         /** @var TranslatorEngineInterface $engine */
         $engine = $this->locator->get($name);
+
         return $engine;
     }
 
