@@ -93,6 +93,42 @@ The bundle will auto‑wire a pool named `survos_translator.cache` if present, o
 
 ---
 
+## In-process engine (`type: bergamot`)
+
+Translation models loaded into the PHP process and called through FFI
+([survos/bergamot](../../lib/bergamot)): no HTTP round trip, no service to keep running, and no cache layer in the
+bundle (a call takes milliseconds; the application's translation memory is the one place a result is kept).
+
+```yaml
+survos_translator:
+  default_engine: fast
+  engines:
+    libre:
+      type: libre
+      base_uri: '%env(resolve:LIBRE_HOST)%'
+    fast:
+      type: bergamot
+      home: '%env(resolve:BERGAMOT_HOME)%'   # holds native/ and models/
+      variant: base                           # tiny | base | base-memory
+      fallback: libre                         # optional
+```
+
+```bash
+bin/console translator:models             # what is installed for each bergamot engine
+bin/console translator:models --install   # download the two models of the configured size, checksum-verified
+bin/console translator:models --verify
+```
+
+`fast` translates in-process when the native libraries and the models are on this machine **and** the pair is one
+the models cover: English to and from cs, de, es, fi, fr, it, nl, pt, sv, and between any two of those through
+English. Otherwise the request goes to `fallback`: another language, a machine without the models, or a text the
+model refuses (a sentence over 120 model tokens, unknown-token output). Without a `fallback`, each of those cases is
+a `TranslatorException` that says why. Every result's `meta` says who translated: `via`, `in_process`, `models`, and
+`in_process_skipped` with the reason when the fallback was used.
+
+Under a web server PHP needs `ffi.enable=1`; the command line (and so `messenger:consume`) always has FFI. Models
+load on first use and stay loaded for the life of the service: once per FrankenPHP worker or consumer process.
+
 ## Quick Start (Sync)
 
 ```php

@@ -5,14 +5,20 @@ declare(strict_types=1);
 namespace Survos\TranslatorBundle;
 
 use Psr\Cache\CacheItemPoolInterface;
+use Survos\Bergamot\ModelManager;
+use Survos\Bergamot\Runtime;
+use Survos\Bergamot\Translator;
+use Survos\TranslatorBundle\Command\BergamotModelsCommand;
 use Survos\TranslatorBundle\Command\TranslatorTestCommand;
 use Survos\TranslatorBundle\Engine\DeepLEngine;
 use Survos\TranslatorBundle\Engine\GoogleTranslateEngine;
+use Survos\TranslatorBundle\Engine\InProcessEngine;
 use Survos\TranslatorBundle\Engine\LibreTranslateEngine;
 use Survos\TranslatorBundle\Retry\RateLimitAwareRetryStrategy;
 use Survos\TranslatorBundle\Service\TranslatorManager;
 use Survos\TranslatorBundle\Service\TranslatorRegistry;
 use Symfony\Component\Config\Definition\Configurator\DefinitionConfigurator;
+use Symfony\Component\Config\Definition\Exception\InvalidConfigurationException;
 use Symfony\Component\DependencyInjection\Argument\ServiceLocatorArgument;
 use Symfony\Component\DependencyInjection\Compiler\CompilerPassInterface;
 use Symfony\Component\DependencyInjection\Compiler\PassConfig;
@@ -74,14 +80,34 @@ Configure one or more named engines. Examples (commented-out):
       #   type: bing
       #   region: 'global'
       #   api_key: '%env(BING_TRANSLATOR_KEY)%'
+
+      # Bergamot models inside this PHP process, through FFI (survos/bergamot): no HTTP. Used when the models are
+      # installed on this machine and cover the language pair; everything else goes to `fallback`.
+      # euronano:
+      #   type: bergamot
+      #   home: '%env(resolve:BERGAMOT_HOME)%'   # holds native/ and models/
+      #   fallback: libre_local
 INFO)
                     ->useAttributeAsKey('name')
                     ->arrayPrototype()
                         ->children()
                             ->enumNode('type')
-                                ->values(['libre', 'bing', 'deepl', 'google'])
+                                ->values(['libre', 'bing', 'deepl', 'google', 'bergamot'])
                                 ->isRequired()
-                                ->info('Provider. API key is REQUIRED for deepl/google/bing; optional for libre.')
+                                ->info('Provider. API key is REQUIRED for deepl/google/bing; optional for libre. "bergamot" runs a model in this process and needs "home".')
+                            ->end()
+                            ->scalarNode('home')
+                                ->defaultNull()
+                                ->info('bergamot: directory holding native/ (the C bridge and the runtime library) and models/.')
+                            ->end()
+                            ->enumNode('variant')
+                                ->values(['tiny', 'base', 'base-memory'])
+                                ->defaultValue('base')
+                                ->info('bergamot: model size. Install models with `bin/console translator:models --install`.')
+                            ->end()
+                            ->scalarNode('fallback')
+                                ->defaultNull()
+                                ->info('bergamot: name of another configured engine that takes what cannot be translated in-process (model not installed here, pair not covered, text refused).')
                             ->end()
                             ->scalarNode('base_uri')
                                 ->defaultNull()
@@ -214,6 +240,7 @@ INFO)
 
         // Register engines
         $engineServiceIds = [];
+        $bergamot = [];
         foreach ($config['engines'] ?? [] as $name => $cfg) {
             $type = (string) $cfg['type'];
             $baseUri = self::resolveBaseUri($type, $cfg);
@@ -259,6 +286,34 @@ INFO)
                         (string) $baseUri,
                     ])
                     ->setPublic(false);
+            } elseif ('bergamot' === $type) {
+                $fallback = $cfg['fallback'] ?? null;
+                if (null !== $fallback) {
+                    $fallbackType = $config['engines'][$fallback]['type'] ?? null;
+                    if ($fallback === $name || !\in_array($fallbackType, ['libre', 'deepl', 'google', 'bergamot'], true)) {
+                        throw new InvalidConfigurationException(sprintf('survos_translator.engines.%s.fallback must name another configured engine, got "%s".', $name, $fallback));
+                    }
+                }
+                $home = (string) ($cfg['home'] ?? '');
+                $managerId = sprintf('survos.translator.bergamot.%s.models', $name);
+                $builder->register($managerId, ModelManager::class)->setArguments([$home])->setPublic(false);
+                $runtimeId = sprintf('survos.translator.bergamot.%s.runtime', $name);
+                $builder->register($runtimeId, Runtime::class)->setArguments([$home])->setPublic(false);
+                $translatorId = sprintf('survos.translator.bergamot.%s', $name);
+                $builder->register($translatorId, Translator::class)
+                    ->setArguments([new Reference($managerId), new Reference($runtimeId), (string) $cfg['variant']])
+                    ->setPublic(false);
+                $engineId = sprintf('survos.translator.engine.%s', $name);
+                // No cache pool on purpose: a call costs milliseconds and the application's translation memory
+                // is the one place a finished translation is kept.
+                $builder->register($engineId, InProcessEngine::class)
+                    ->setArguments([
+                        new Reference($translatorId),
+                        $name,
+                        null === $fallback ? null : new Reference(sprintf('survos.translator.engine.%s', $fallback)),
+                    ])
+                    ->setPublic(false);
+                $bergamot[$name] = ['models' => $managerId, 'variant' => (string) $cfg['variant']];
             } else {
                 // 'bing' or unknown placeholder for future engines
                 continue;
@@ -266,6 +321,16 @@ INFO)
 
             $engineServiceIds[$name] = $engineId;
         }
+
+        // translator:models manages the models of every bergamot engine.
+        $managers = [];
+        foreach ($bergamot as $n => $info) {
+            $managers[$n] = new Reference($info['models']);
+        }
+        $builder->autowire(BergamotModelsCommand::class)
+            ->setArgument('$managers', new ServiceLocatorArgument($managers))
+            ->setArgument('$variants', array_map(static fn (array $i): string => $i['variant'], $bergamot))
+            ->addTag('console.command');
 
         // ServiceLocator for registry
         $locatorMap = [];
